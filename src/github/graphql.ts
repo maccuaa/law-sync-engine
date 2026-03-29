@@ -11,7 +11,7 @@ function getGraphqlClient() {
 export async function getProjectId(
   owner: string,
   projectNumber: number,
-): Promise<{ id: string; title: string; fields: ProjectField[] }> {
+): Promise<{ id: string; title: string; fields: ProjectField[] } | null> {
   const gql = getGraphqlClient();
 
   const result = await gql<{
@@ -54,6 +54,7 @@ export async function getProjectId(
   );
 
   const project = result.user.projectV2;
+  if (!project) return null;
   return {
     id: project.id,
     title: project.title,

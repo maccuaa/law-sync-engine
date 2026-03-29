@@ -17,6 +17,13 @@ import {
 } from "../git/operations.js";
 import { addLabels, createPullRequest } from "../github/rest.js";
 import { parseBillXml } from "../parsers/bill-xml.js";
+import {
+  safeBranchName,
+  safeFilePath,
+  sanitizeForGit,
+  sanitizeGitAuthor,
+  validateBillNumber,
+} from "../validation.js";
 
 export async function sync(): Promise<void> {
   const config = getConfig();
@@ -37,16 +44,18 @@ export async function sync(): Promise<void> {
   let failCount = 0;
 
   for (const bill of bills) {
-    const branchName = `bill/${bill.number}`;
-
     try {
+      // Validate bill number before any operations
+      const validatedNumber = validateBillNumber(bill.number);
+      const branchName = safeBranchName(validatedNumber);
+
       const exists = await branchExists(branchName, lawsRepoPath);
       if (exists) {
         skipCount++;
         continue;
       }
 
-      console.log(`\n🆕 New bill: ${bill.number} — ${bill.name.en}`);
+      console.log(`\n🆕 New bill: ${validatedNumber} — ${sanitizeForGit(bill.name.en)}`);
 
       // Fetch sponsor MP details
       let author = "Parliament of Canada <info@parl.gc.ca>";
@@ -56,7 +65,7 @@ export async function sync(): Promise<void> {
             bill.sponsor_politician_url,
           );
           if (politician.email) {
-            author = `${politician.name} <${politician.email}>`;
+            author = sanitizeGitAuthor(politician.name, politician.email);
           }
           console.log(`  👤 Sponsor: ${politician.name}`);
         } catch (e) {
@@ -66,7 +75,7 @@ export async function sync(): Promise<void> {
 
       // Fetch bill XML
       let markdown: string;
-      const xmlUrl = await getBillXmlUrl(session, bill.number);
+      const xmlUrl = await getBillXmlUrl(session, validatedNumber);
       if (xmlUrl) {
         console.log("  📥 Fetching bill XML...");
         const xml = await fetchBillXml(xmlUrl);
@@ -74,21 +83,22 @@ export async function sync(): Promise<void> {
         markdown = parsed.markdown;
       } else {
         console.warn("  ⚠️ No XML available, creating placeholder");
+        const safeTitle = sanitizeForGit(bill.short_title?.en || bill.name.en);
         markdown = [
           "---",
-          `bill_number: "${bill.number}"`,
-          `title: "${bill.short_title?.en || bill.name.en}"`,
+          `bill_number: "${validatedNumber}"`,
+          `title: "${safeTitle}"`,
           `session: "${session}"`,
           `introduced: "${bill.introduced || "unknown"}"`,
           "---",
           "",
-          `# Bill ${bill.number} — ${bill.short_title?.en || bill.name.en}`,
+          `# Bill ${validatedNumber} — ${safeTitle}`,
           "",
-          `> ${bill.name.en}`,
+          `> ${sanitizeForGit(bill.name.en)}`,
           "",
           "*Bill text not yet available in XML format.*",
           "",
-          `[View on LEGISinfo](https://www.parl.ca/legisinfo/en/bill/${session}/${bill.number.toLowerCase()})`,
+          `[View on LEGISinfo](https://www.parl.ca/legisinfo/en/bill/${session}/${validatedNumber.toLowerCase()})`,
           `[View on OpenParliament](https://openparliament.ca${bill.url})`,
           "",
         ].join("\n");
@@ -98,15 +108,16 @@ export async function sync(): Promise<void> {
       await checkoutMain(lawsRepoPath);
       await createBranch(branchName, lawsRepoPath);
 
-      const slug = bill.number.toLowerCase();
+      const relativePath = safeFilePath("bills", validatedNumber.toLowerCase());
       await mkdir(resolve(lawsRepoPath, "bills"), { recursive: true });
-      const filePath = resolve(lawsRepoPath, "bills", `${slug}.md`);
+      const filePath = resolve(lawsRepoPath, relativePath);
       await Bun.write(filePath, markdown);
 
-      const relativePath = `bills/${slug}.md`;
+      const safeTitle = sanitizeForGit(bill.short_title?.en || bill.name.en);
+      const sponsorName = sanitizeForGit(author.split(" <")[0]);
       await commitFile(
         relativePath,
-        `feat: introduce Bill ${bill.number} — ${bill.short_title?.en || bill.name.en}\n\nSponsored by: ${author.split(" <")[0]}\nSession: ${session}\nIntroduced: ${bill.introduced || "unknown"}`,
+        `feat: introduce Bill ${validatedNumber} — ${safeTitle}\n\nSponsored by: ${sponsorName}\nSession: ${session}\nIntroduced: ${bill.introduced || "unknown"}`,
         author,
         lawsRepoPath,
       );
@@ -115,13 +126,12 @@ export async function sync(): Promise<void> {
       console.log(`  📤 Pushed branch ${branchName}`);
 
       // Create PR
-      const shortTitle = bill.short_title?.en || bill.name.en;
       const prBody = buildPrBody(bill, session, author);
 
       const pr = await createPullRequest({
         owner,
         repo,
-        title: `Bill ${bill.number}: ${shortTitle}`,
+        title: `Bill ${validatedNumber}: ${safeTitle}`,
         body: prBody,
         head: branchName,
         base: "main",
