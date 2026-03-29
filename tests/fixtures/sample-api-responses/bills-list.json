@@ -1,0 +1,39 @@
+{
+  "pagination": {
+    "offset": 0,
+    "limit": 20,
+    "next_url": "/bills/?format=json&limit=20&offset=20&session=44-1",
+    "previous_url": null
+  },
+  "objects": [
+    {
+      "session": "44-1",
+      "legisinfo_id": 11528728,
+      "introduced": "2022-02-02",
+      "name": {
+        "en": "An Act to amend the Broadcasting Act and to make related and consequential amendments to other Acts",
+        "fr": "Loi modifiant la Loi sur la radiodiffusion et apportant des modifications connexes et corrélatives à d'autres lois"
+      },
+      "number": "C-11",
+      "short_title": {
+        "en": "Online Streaming Act"
+      },
+      "home_chamber": "House",
+      "law": true,
+      "sponsor_politician_url": "/politicians/pablo-rodriguez/",
+      "text_url": "https://www.parl.ca/DocumentViewer/en/12381790",
+      "vote_urls": ["/votes/44-1/292/"],
+      "url": "/bills/44-1/C-11/"
+    },
+    {
+      "session": "44-1",
+      "name": {
+        "en": "An Act respecting cyber security"
+      },
+      "number": "C-26",
+      "home_chamber": "House",
+      "law": false,
+      "url": "/bills/44-1/C-26/"
+    }
+  ]
+}

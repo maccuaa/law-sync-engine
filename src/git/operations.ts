@@ -1,0 +1,78 @@
+export async function gitExec(
+  args: string[],
+  cwd: string,
+): Promise<string> {
+  const proc = Bun.spawn(["git", ...args], {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const exitCode = await proc.exited;
+  const stdout = await new Response(proc.stdout).text();
+  const stderr = await new Response(proc.stderr).text();
+
+  if (exitCode !== 0) {
+    throw new Error(
+      `git ${args.join(" ")} failed (exit ${exitCode}): ${stderr.trim()}`,
+    );
+  }
+
+  return stdout.trim();
+}
+
+export async function createBranch(
+  branchName: string,
+  cwd: string,
+): Promise<void> {
+  await gitExec(["checkout", "-b", branchName], cwd);
+}
+
+export async function checkoutBranch(
+  branchName: string,
+  cwd: string,
+): Promise<void> {
+  await gitExec(["checkout", branchName], cwd);
+}
+
+export async function checkoutMain(cwd: string): Promise<void> {
+  await gitExec(["checkout", "main"], cwd);
+}
+
+export async function commitFile(
+  filePath: string,
+  message: string,
+  author: string,
+  cwd: string,
+): Promise<void> {
+  await gitExec(["add", filePath], cwd);
+  await gitExec(["commit", "-m", message, "--author", author], cwd);
+}
+
+export async function push(
+  branchName: string,
+  cwd: string,
+): Promise<void> {
+  await gitExec(["push", "origin", branchName], cwd);
+}
+
+export async function branchExists(
+  branchName: string,
+  cwd: string,
+): Promise<boolean> {
+  try {
+    await gitExec(["rev-parse", "--verify", branchName], cwd);
+    return true;
+  } catch {
+    // Check remote
+    try {
+      await gitExec(
+        ["rev-parse", "--verify", `origin/${branchName}`],
+        cwd,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}

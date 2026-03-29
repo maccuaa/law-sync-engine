@@ -5,6 +5,7 @@ const envSchema = z.object({
   GITHUB_OWNER: z.string().default("maccuaa"),
   LAWS_REPO: z.string().default("canadian-laws"),
   LAWS_REPO_PATH: z.string().default("../canadian-laws"),
+  PROJECT_NUMBER: z.coerce.number().default(1),
 });
 
 export type Config = z.infer<typeof envSchema>;
