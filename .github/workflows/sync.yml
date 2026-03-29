@@ -1,0 +1,45 @@
+name: Daily Sync
+
+on:
+  schedule:
+    - cron: '0 12 * * *' # Noon UTC daily
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  sync-bills:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout law-sync-engine
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Clone canadian-laws
+        run: |
+          git clone https://x-access-token:${{ secrets.LAWS_SYNC_TOKEN }}@github.com/maccuaa/canadian-laws.git ../canadian-laws
+          cd ../canadian-laws
+          git config user.name "law-sync-engine[bot]"
+          git config user.email "law-sync-engine[bot]@users.noreply.github.com"
+
+      - name: Sync new bills
+        env:
+          GITHUB_TOKEN: ${{ secrets.LAWS_SYNC_TOKEN }}
+          GITHUB_OWNER: maccuaa
+          LAWS_REPO: canadian-laws
+          LAWS_REPO_PATH: ../canadian-laws
+        run: bun run src/index.ts sync
+
+      - name: Update project board
+        env:
+          GITHUB_TOKEN: ${{ secrets.LAWS_SYNC_TOKEN }}
+          GITHUB_OWNER: maccuaa
+          LAWS_REPO: canadian-laws
+          LAWS_REPO_PATH: ../canadian-laws
+          PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER || '1' }}
+        run: bun run src/index.ts update-board
