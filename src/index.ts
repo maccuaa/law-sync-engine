@@ -19,9 +19,16 @@ program
 program
   .command("sync")
   .description("Detect new bills and create PRs in canadian-laws")
-  .action(async () => {
+  .option("--limit <n>", "Maximum number of bills to process", Number.parseInt)
+  .option("--bill <number>", "Sync a single bill (e.g. C-2)")
+  .option("--dry-run", "Show what would happen without making changes")
+  .action(async (opts) => {
     const { sync } = await import("./commands/sync.js");
-    await sync();
+    await sync({
+      limit: opts.limit,
+      bill: opts.bill,
+      dryRun: opts.dryRun,
+    });
   });
 
 program

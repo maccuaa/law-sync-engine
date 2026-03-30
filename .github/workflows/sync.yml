@@ -4,6 +4,20 @@ on:
   schedule:
     - cron: '0 12 * * *' # Noon UTC daily
   workflow_dispatch: # Manual trigger
+    inputs:
+      limit:
+        description: 'Max bills to process (empty = all)'
+        required: false
+        type: string
+      bill:
+        description: 'Sync a single bill (e.g. C-2)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run (no changes)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   sync-bills:
@@ -33,7 +47,12 @@ jobs:
           GITHUB_OWNER: maccuaa
           LAWS_REPO: canadian-laws
           LAWS_REPO_PATH: ../canadian-laws
-        run: bun run src/index.ts sync
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ inputs.limit }}"; fi
+          if [ -n "${{ inputs.bill }}" ]; then ARGS="$ARGS --bill ${{ inputs.bill }}"; fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          bun run src/index.ts sync $ARGS
 
       - name: Update project board
         env:

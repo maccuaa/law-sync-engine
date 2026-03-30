@@ -31,7 +31,13 @@ import {
   validateBillNumber,
 } from "../validation.js";
 
-export async function sync(): Promise<void> {
+export interface SyncOptions {
+  limit?: number;
+  bill?: string;
+  dryRun?: boolean;
+}
+
+export async function sync(options: SyncOptions = {}): Promise<void> {
   const config = getConfig();
   const lawsRepoPath = resolve(config.LAWS_REPO_PATH);
   const owner = config.GITHUB_OWNER;
@@ -42,8 +48,26 @@ export async function sync(): Promise<void> {
   const session = config.SESSION || (await getCurrentSession());
   console.log(`📅 Current session: ${session}`);
 
-  const bills = await listBills(session);
+  let bills = await listBills(session);
   console.log(`📋 Found ${bills.length} bills in session ${session}`);
+
+  // Apply scope filters
+  if (options.bill) {
+    const target = options.bill.toUpperCase();
+    bills = bills.filter((b) => b.number.toUpperCase() === target);
+    if (bills.length === 0) {
+      console.error(`❌ Bill ${target} not found in session ${session}`);
+      return;
+    }
+    console.log(`🎯 Filtering to single bill: ${target}`);
+  }
+  if (options.limit && options.limit > 0) {
+    bills = bills.slice(0, options.limit);
+    console.log(`🔢 Limiting to ${options.limit} bills`);
+  }
+  if (options.dryRun) {
+    console.log("🧪 Dry run mode — no changes will be made");
+  }
 
   let newCount = 0;
   let skipCount = 0;
@@ -91,26 +115,31 @@ export async function sync(): Promise<void> {
         }
         try {
           const prBody = buildPrBody(fullBill, session, author);
-          const pr = await createPullRequest({
-            owner,
-            repo,
-            title: `Bill ${validatedNumber}: ${safeTitle}`,
-            body: prBody,
-            head: branchName,
-            base: "main",
-          });
-          console.log(`  📝 Recovered PR #${pr.number}: ${pr.html_url}`);
-          const labels = ["bill", session];
-          if (fullBill.home_chamber === "House") labels.push("house");
-          if (fullBill.home_chamber === "Senate") labels.push("senate");
-          try {
-            await addLabels(owner, repo, pr.number, labels);
-          } catch {
-            // Non-fatal
+          if (options.dryRun) {
+            console.log(`  🧪 Would create PR for orphan branch ${branchName}`);
+            newCount++;
+          } else {
+            const pr = await createPullRequest({
+              owner,
+              repo,
+              title: `Bill ${validatedNumber}: ${safeTitle}`,
+              body: prBody,
+              head: branchName,
+              base: "main",
+            });
+            console.log(`  📝 Recovered PR #${pr.number}: ${pr.html_url}`);
+            const labels = ["bill", session];
+            if (fullBill.home_chamber === "House") labels.push("house");
+            if (fullBill.home_chamber === "Senate") labels.push("senate");
+            try {
+              await addLabels(owner, repo, pr.number, labels);
+            } catch {
+              // Non-fatal
+            }
+            // Gentle delay to avoid GitHub secondary rate limits
+            await new Promise((r) => setTimeout(r, 1000));
+            newCount++;
           }
-          // Gentle delay to avoid GitHub secondary rate limits
-          await new Promise((r) => setTimeout(r, 1000));
-          newCount++;
         } catch (e) {
           console.error(`  ❌ Failed to recover PR for ${branchName}: ${e}`);
           failCount++;
@@ -177,6 +206,21 @@ export async function sync(): Promise<void> {
           `[View on OpenParliament](https://openparliament.ca${fullBill.url})`,
           "",
         ].join("\n");
+      }
+
+      if (options.dryRun) {
+        const safeTitle = sanitizeForGit(
+          fullBill.short_title?.en || fullBill.name.en,
+        );
+        console.log(
+          `  🧪 Would create branch ${branchName}, commit, and open PR: "Bill ${validatedNumber}: ${safeTitle}"`,
+        );
+        console.log(`  🧪 Author: ${author}`);
+        console.log(
+          `  🧪 Chamber: ${fullBill.home_chamber || "Unknown"}, XML: ${xmlUrl ? "yes" : "no"}`,
+        );
+        newCount++;
+        continue;
       }
 
       // Create branch and commit
