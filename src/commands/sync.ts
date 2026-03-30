@@ -84,15 +84,15 @@ export async function sync(options: SyncOptions = {}): Promise<void> {
       const validatedNumber = validateBillNumber(bill.number);
       const branchName = safeBranchName(validatedNumber);
 
+      // Check if a PR already exists for this bill (in any state: open, closed, merged)
+      const existingPr = await findPullRequestByHead(owner, repo, branchName);
+      if (existingPr) {
+        skipCount++;
+        continue;
+      }
+
       const exists = await branchExists(branchName, lawsRepoPath);
       if (exists) {
-        // Branch exists — but does a PR exist too?
-        const existingPr = await findPullRequestByHead(owner, repo, branchName);
-        if (existingPr) {
-          // PR exists in any state (open, closed, merged) — skip it
-          skipCount++;
-          continue;
-        }
         // Branch exists but no PR — recover by creating the PR
         console.log(
           `\n🔧 Recovering orphan branch ${branchName} — creating PR...`,
