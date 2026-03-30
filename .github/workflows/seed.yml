@@ -2,6 +2,20 @@ name: Seed Statutes
 
 on:
   workflow_dispatch:
+    inputs:
+      all:
+        description: "Seed all ~900 acts from Justice Laws index"
+        required: false
+        type: boolean
+        default: false
+      limit:
+        description: "Maximum number of statutes to seed (use with all)"
+        required: false
+        type: number
+      act:
+        description: "Seed a single act by Justice Laws ID (e.g. C-46)"
+        required: false
+        type: string
 
 jobs:
   seed:
@@ -31,4 +45,9 @@ jobs:
           GITHUB_OWNER: maccuaa
           LAWS_REPO: canadian-laws
           LAWS_REPO_PATH: ../canadian-laws
-        run: bun run src/index.ts seed
+        run: |
+          ARGS=""
+          if [ "${{ inputs.all }}" = "true" ]; then ARGS="$ARGS --all"; fi
+          if [ -n "${{ inputs.limit }}" ]; then ARGS="$ARGS --limit ${{ inputs.limit }}"; fi
+          if [ -n "${{ inputs.act }}" ]; then ARGS="$ARGS --act ${{ inputs.act }}"; fi
+          bun run src/index.ts seed $ARGS

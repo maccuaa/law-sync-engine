@@ -11,9 +11,20 @@ program
 program
   .command("seed")
   .description("Seed the canadian-laws repo with consolidated statutes")
-  .action(async () => {
+  .option("--all", "Seed all ~900 acts from Justice Laws index")
+  .option(
+    "--limit <n>",
+    "Maximum number of statutes to seed (use with --all)",
+    Number.parseInt,
+  )
+  .option("--act <id>", "Seed a single act by Justice Laws ID (e.g. C-46)")
+  .action(async (opts) => {
     const { seed } = await import("./commands/seed.js");
-    await seed();
+    await seed({
+      all: opts.all,
+      limit: opts.limit,
+      act: opts.act,
+    });
   });
 
 program

@@ -1,5 +1,8 @@
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { lookupActId } from "../api/acts-registry.js";
+import { fetchStatuteXml } from "../api/justice-laws.js";
 import { fetchBillXml, getBillXmlUrl } from "../api/legisinfo.js";
 import type { Bill } from "../api/openparliament.js";
 import {
@@ -23,6 +26,7 @@ import {
   findPullRequestByHead,
 } from "../github/rest.js";
 import { parseBillXml } from "../parsers/bill-xml.js";
+import { parseStatuteXml } from "../parsers/justice-laws-xml.js";
 import {
   extractAffectedStatutes,
   safeBranchName,
@@ -279,6 +283,12 @@ export async function sync(options: SyncOptions = {}): Promise<void> {
       await new Promise((r) => setTimeout(r, 1000));
 
       await checkoutMain(lawsRepoPath);
+
+      // Eagerly fetch any affected statutes that don't exist in the repo yet
+      if (!options.dryRun) {
+        await ensureMissingStatutes(fullBill.name.en, lawsRepoPath);
+      }
+
       newCount++;
     } catch (error) {
       console.error(`  ❌ Failed to process ${bill.number}: ${error}`);
@@ -343,4 +353,50 @@ function buildPrBody(bill: Bill, session: string, author: string): string {
   );
 
   return lines.filter(Boolean).join("\n");
+}
+
+const STATUTE_AUTHOR = "Parliament of Canada <info@parl.gc.ca>";
+
+/**
+ * Check if statutes referenced by a bill already exist in the repo.
+ * If not, fetch them from Justice Laws and commit to main.
+ */
+async function ensureMissingStatutes(
+  billTitle: string,
+  lawsRepoPath: string,
+): Promise<void> {
+  const slugs = extractAffectedStatutes(billTitle);
+  if (slugs.length === 0) return;
+
+  for (const slug of slugs) {
+    const statutePath = resolve(lawsRepoPath, "statutes", `${slug}.md`);
+    if (existsSync(statutePath)) continue;
+
+    // Statute doesn't exist — try to fetch it
+    const actId = await lookupActId(slug);
+    if (!actId) {
+      console.log(`  📚 No matching act in Justice Laws index for "${slug}"`);
+      continue;
+    }
+
+    try {
+      console.log(`  📥 Fetching missing statute: ${slug} (${actId})...`);
+      const xml = await fetchStatuteXml(actId);
+      const { metadata, markdown } = parseStatuteXml(xml, actId);
+
+      await Bun.write(statutePath, markdown);
+
+      const statuteName = metadata.shortTitle || metadata.longTitle;
+      await commitFile(
+        `statutes/${slug}.md`,
+        `feat: add ${statuteName}\n\nAct ID: ${actId}\nSource: https://laws-lois.justice.gc.ca/eng/acts/${actId.toLowerCase()}/`,
+        STATUTE_AUTHOR,
+        lawsRepoPath,
+      );
+      await push("main", lawsRepoPath);
+      console.log(`  📜 Seeded statute: ${statuteName}`);
+    } catch (e) {
+      console.warn(`  ⚠️ Could not fetch statute "${slug}" (${actId}): ${e}`);
+    }
+  }
 }

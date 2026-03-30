@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { lookupActId } from "../api/acts-registry.js";
 import { fetchStatuteXml } from "../api/justice-laws.js";
 import type { Bill } from "../api/openparliament.js";
 import {
@@ -44,18 +45,6 @@ const STATUS_CODE_MAP: Record<string, BoardColumn> = {
   BillDefeated: "Defeated",
   BillWithdrawn: "Defeated",
   BillNotProceededWith: "Defeated",
-};
-
-// Map statute slugs (as extracted from PR titles) to Justice Laws act IDs.
-const STATUTE_SLUG_TO_ACT_ID: Record<string, string> = {
-  "broadcasting-act": "B-9.01",
-  "criminal-code": "C-46",
-  "canada-elections-act": "E-2.01",
-  "canada-labour-code": "L-2",
-  "access-to-information-act": "A-1",
-  "privacy-act": "P-21",
-  "canadian-human-rights-act": "C-29",
-  "interpretation-act": "I-21",
 };
 
 const STATUTE_AUTHOR = "Parliament of Canada <info@parl.gc.ca>";
@@ -256,10 +245,10 @@ async function refreshAffectedStatutes(
   await checkoutMain(lawsRepoPath);
 
   for (const slug of slugs) {
-    const actId = STATUTE_SLUG_TO_ACT_ID[slug];
+    const actId = await lookupActId(slug);
     if (!actId) {
       console.warn(
-        `  ⚠️ No act ID mapping for statute slug "${slug}", skipping`,
+        `  ⚠️ No act found in Justice Laws index for slug "${slug}", skipping`,
       );
       continue;
     }

@@ -1,10 +1,12 @@
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { getActsRegistry } from "../api/acts-registry.js";
 import { fetchStatuteXml } from "../api/justice-laws.js";
 import { getConfig } from "../config.js";
 import { checkoutMain, commitFile, gitExec, push } from "../git/operations.js";
 import { parseStatuteXml } from "../parsers/justice-laws-xml.js";
 
-const TARGET_STATUTES = [
+const DEFAULT_STATUTES = [
   { actId: "B-9.01", slug: "broadcasting-act" },
   { actId: "C-46", slug: "criminal-code" },
   { actId: "E-2.01", slug: "canada-elections-act" },
@@ -17,7 +19,13 @@ const TARGET_STATUTES = [
 
 const SEED_AUTHOR = "Parliament of Canada <info@parl.gc.ca>";
 
-export async function seed(): Promise<void> {
+export interface SeedOptions {
+  all?: boolean;
+  limit?: number;
+  act?: string;
+}
+
+export async function seed(options: SeedOptions = {}): Promise<void> {
   const config = getConfig();
   const lawsRepoPath = resolve(config.LAWS_REPO_PATH);
 
@@ -30,10 +38,56 @@ export async function seed(): Promise<void> {
   const statutesDir = resolve(lawsRepoPath, "statutes");
   await Bun.write(resolve(statutesDir, ".gitkeep"), "");
 
+  // Determine which statutes to seed
+  let targets: Array<{ actId: string; slug: string }>;
+
+  if (options.all || options.limit || options.act) {
+    const registry = await getActsRegistry();
+
+    if (options.act) {
+      // Seed a specific act by ID (e.g., "C-29")
+      const entry = [...registry.values()].find(
+        (e) => e.actId.toLowerCase() === options.act?.toLowerCase(),
+      );
+      if (!entry) {
+        console.error(
+          `❌ Act "${options.act}" not found in Justice Laws index`,
+        );
+        return;
+      }
+      targets = [{ actId: entry.actId, slug: entry.slug }];
+      console.log(`🎯 Seeding single act: ${entry.title} (${entry.actId})`);
+    } else {
+      // Seed from full registry
+      targets = [...registry.values()].map((e) => ({
+        actId: e.actId,
+        slug: e.slug,
+      }));
+
+      if (options.limit && options.limit > 0) {
+        targets = targets.slice(0, options.limit);
+        console.log(`🔢 Limiting to ${options.limit} statutes`);
+      } else {
+        console.log(`📖 Seeding all ${targets.length} statutes`);
+      }
+    }
+  } else {
+    targets = DEFAULT_STATUTES;
+    console.log(`📋 Seeding ${targets.length} default statutes`);
+  }
+
   let successCount = 0;
+  let skipCount = 0;
   let failCount = 0;
 
-  for (const { actId, slug } of TARGET_STATUTES) {
+  for (const { actId, slug } of targets) {
+    // Skip already-seeded statutes
+    const filePath = resolve(statutesDir, `${slug}.md`);
+    if (existsSync(filePath)) {
+      skipCount++;
+      continue;
+    }
+
     try {
       console.log(`\n📥 Fetching ${actId} (${slug})...`);
       const xml = await fetchStatuteXml(actId);
@@ -41,7 +95,6 @@ export async function seed(): Promise<void> {
       console.log("  🔄 Parsing XML → Markdown...");
       const { metadata, markdown } = parseStatuteXml(xml, actId);
 
-      const filePath = resolve(statutesDir, `${slug}.md`);
       await Bun.write(filePath, markdown);
       console.log(`  📝 Wrote ${filePath}`);
 
@@ -61,7 +114,7 @@ export async function seed(): Promise<void> {
   }
 
   console.log(
-    `\n📊 Seed complete: ${successCount} succeeded, ${failCount} failed`,
+    `\n📊 Seed complete: ${successCount} succeeded, ${skipCount} skipped (already exist), ${failCount} failed`,
   );
 
   if (successCount > 0) {
