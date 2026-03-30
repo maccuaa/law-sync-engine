@@ -84,9 +84,11 @@ export async function sync(options: SyncOptions = {}): Promise<void> {
       const validatedNumber = validateBillNumber(bill.number);
       const branchName = safeBranchName(validatedNumber);
 
-      // Check if a PR already exists for this bill (in any state: open, closed, merged)
+      // Check if a PR already exists for this bill
+      // Skip if open (in progress) or merged (completed). Allow re-creation if
+      // closed without merge (e.g., a broken PR that was manually closed).
       const existingPr = await findPullRequestByHead(owner, repo, branchName);
-      if (existingPr) {
+      if (existingPr && (existingPr.state === "open" || existingPr.merged)) {
         skipCount++;
         continue;
       }
