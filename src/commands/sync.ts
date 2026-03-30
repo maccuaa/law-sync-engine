@@ -93,18 +93,35 @@ export async function sync(options: SyncOptions = {}): Promise<void> {
         continue;
       }
 
+      // Fetch full bill details early — needed for status check and PR creation
+      let fullBill = bill;
+      try {
+        fullBill = await getBill(session, validatedNumber);
+      } catch {
+        // Use list data as fallback
+      }
+
+      // Skip defeated/withdrawn bills — no point creating a PR that will
+      // immediately be closed by update-board
+      const DEFEATED_STATUSES = [
+        "BillDefeated",
+        "BillWithdrawn",
+        "BillNotProceededWith",
+      ];
+      if (
+        fullBill.status_code &&
+        DEFEATED_STATUSES.includes(fullBill.status_code)
+      ) {
+        skipCount++;
+        continue;
+      }
+
       const exists = await branchExists(branchName, lawsRepoPath);
       if (exists) {
         // Branch exists but no PR — recover by creating the PR
         console.log(
           `\n🔧 Recovering orphan branch ${branchName} — creating PR...`,
         );
-        let fullBill = bill;
-        try {
-          fullBill = await getBill(session, validatedNumber);
-        } catch {
-          // Use list data as fallback
-        }
         const safeTitle = sanitizeForGit(
           fullBill.short_title?.en || fullBill.name.en,
         );
@@ -158,14 +175,6 @@ export async function sync(options: SyncOptions = {}): Promise<void> {
       console.log(
         `\n🆕 New bill: ${validatedNumber} — ${sanitizeForGit(bill.name.en)}`,
       );
-
-      // Fetch full bill details (list endpoint only has minimal fields)
-      let fullBill = bill;
-      try {
-        fullBill = await getBill(session, validatedNumber);
-      } catch (e) {
-        console.warn(`  ⚠️ Could not fetch bill details, using list data: ${e}`);
-      }
 
       // Fetch sponsor MP details
       let author = "Parliament of Canada <info@parl.gc.ca>";
