@@ -29,9 +29,44 @@ export function safeBranchName(billNumber: string): string {
 }
 
 export function safeFilePath(directory: string, filename: string): string {
+  const segments = directory.split("/");
+  for (const seg of segments) {
+    if (seg === ".." || seg === "") {
+      throw new Error(
+        `Invalid directory path: "${directory}". Must not contain ".." or empty segments.`,
+      );
+    }
+  }
+
   const safeFilename = filename.replace(/[^a-z0-9-]/g, "");
   if (!SAFE_SLUG_REGEX.test(safeFilename) || safeFilename.length === 0) {
     throw new Error(`Invalid filename slug: "${filename}"`);
   }
   return `${directory}/${safeFilename}.md`;
+}
+
+export function extractAffectedStatutes(title: string): string[] {
+  const slugs: string[] = [];
+  // Match "amend the X Act" or "amend the X Code" patterns
+  const amendMatch = title.match(/amend the (.+)/i);
+  if (!amendMatch) return slugs;
+
+  // Split on ", the" and " and the" to handle multiple acts
+  const actsPart = amendMatch[1];
+  const actNames = actsPart.split(/(?:,\s*the\s+|\s+and the\s+)/i);
+
+  for (const name of actNames) {
+    // Extract just the act/code name (stop at common suffixes)
+    const cleanMatch = name.match(/^(.+?\s+(?:Act|Code))/i);
+    if (cleanMatch) {
+      const slug = cleanMatch[1]
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9-]/g, "");
+      if (slug) slugs.push(slug);
+    }
+  }
+
+  return slugs;
 }

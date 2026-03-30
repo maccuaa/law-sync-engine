@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+import { fetchStatuteXml } from "../api/justice-laws.js";
 import type { Bill } from "../api/openparliament.js";
 import {
   getBill,
@@ -6,13 +8,20 @@ import {
 } from "../api/openparliament.js";
 import type { BoardColumn } from "../config.js";
 import { getConfig } from "../config.js";
+import { checkoutMain, commitFile, push } from "../git/operations.js";
 import {
   addItemToProject,
   getProjectId,
   getProjectItems,
   updateItemField,
 } from "../github/graphql.js";
-import { listOpenPullRequests } from "../github/rest.js";
+import {
+  closePullRequest,
+  listOpenPullRequests,
+  mergePullRequest,
+} from "../github/rest.js";
+import { parseStatuteXml } from "../parsers/justice-laws-xml.js";
+import { extractAffectedStatutes } from "../validation.js";
 
 // Map OpenParliament status_code values to board columns.
 // Source: https://github.com/michaelmulley/openparliament
@@ -36,6 +45,20 @@ const STATUS_CODE_MAP: Record<string, BoardColumn> = {
   BillWithdrawn: "Defeated",
   BillNotProceededWith: "Defeated",
 };
+
+// Map statute slugs (as extracted from PR titles) to Justice Laws act IDs.
+const STATUTE_SLUG_TO_ACT_ID: Record<string, string> = {
+  "broadcasting-act": "B-9.01",
+  "criminal-code": "C-46",
+  "canada-elections-act": "E-2.01",
+  "canada-labour-code": "L-2",
+  "access-to-information-act": "A-1",
+  "privacy-act": "P-21",
+  "canadian-human-rights-act": "C-29",
+  "interpretation-act": "I-21",
+};
+
+const STATUTE_AUTHOR = "Parliament of Canada <info@parl.gc.ca>";
 
 export function mapStatusToColumn(bill: Bill): BoardColumn {
   if (bill.law) return "Royal Assent";
@@ -104,6 +127,8 @@ export async function updateBoard(): Promise<void> {
   // 6. Reconcile PRs with the board
   let addedCount = 0;
   let movedCount = 0;
+  let mergedCount = 0;
+  let closedCount = 0;
 
   for (const pr of openPrs) {
     const billMatch = pr.title.match(/Bill\s+(C-\d+|S-\d+)/i);
@@ -122,6 +147,51 @@ export async function updateBoard(): Promise<void> {
     }
 
     const targetColumn = bill ? mapStatusToColumn(bill) : "First Reading";
+
+    // Auto-merge on Royal Assent
+    if (targetColumn === "Royal Assent") {
+      try {
+        await mergePullRequest(owner, repo, pr.number);
+        console.log(
+          `  ✅ Merged PR #${pr.number} (Royal Assent: Bill ${billNumber})`,
+        );
+        mergedCount++;
+      } catch (e) {
+        console.warn(`  ⚠️ Failed to merge PR #${pr.number}: ${e}`);
+        continue;
+      }
+
+      // Best-effort statute refresh after merge
+      try {
+        await refreshAffectedStatutes(
+          pr.title,
+          billNumber,
+          pr.number,
+          owner,
+          repo,
+        );
+      } catch (e) {
+        console.warn(`  ⚠️ Statute refresh failed for PR #${pr.number}: ${e}`);
+      }
+
+      continue;
+    }
+
+    // Auto-close defeated bills
+    if (targetColumn === "Defeated") {
+      try {
+        await closePullRequest(owner, repo, pr.number);
+        console.log(
+          `  🚫 Closed PR #${pr.number} (Defeated: Bill ${billNumber})`,
+        );
+        closedCount++;
+      } catch (e) {
+        console.warn(`  ⚠️ Failed to close PR #${pr.number}: ${e}`);
+      }
+
+      continue;
+    }
+
     const targetOptionId = optionsByName.get(targetColumn);
 
     if (!targetOptionId) {
@@ -166,6 +236,54 @@ export async function updateBoard(): Promise<void> {
   }
 
   console.log(
-    `\n📊 Board update complete: ${addedCount} added, ${movedCount} moved`,
+    `\n📊 Board update complete: ${addedCount} added, ${movedCount} moved, ${mergedCount} merged, ${closedCount} closed`,
   );
+}
+
+async function refreshAffectedStatutes(
+  prTitle: string,
+  billNumber: string,
+  prNumber: number,
+  owner: string,
+  repo: string,
+): Promise<void> {
+  const config = getConfig();
+  const lawsRepoPath = resolve(config.LAWS_REPO_PATH);
+  const slugs = extractAffectedStatutes(prTitle);
+
+  if (slugs.length === 0) return;
+
+  await checkoutMain(lawsRepoPath);
+
+  for (const slug of slugs) {
+    const actId = STATUTE_SLUG_TO_ACT_ID[slug];
+    if (!actId) {
+      console.warn(
+        `  ⚠️ No act ID mapping for statute slug "${slug}", skipping`,
+      );
+      continue;
+    }
+
+    try {
+      const xml = await fetchStatuteXml(actId);
+      const { metadata, markdown } = parseStatuteXml(xml, actId);
+
+      const filePath = resolve(lawsRepoPath, "statutes", `${slug}.md`);
+      await Bun.write(filePath, markdown);
+
+      const statuteName = metadata.shortTitle || metadata.longTitle;
+      const commitMessage = `law: update ${statuteName} (Royal Assent: Bill ${billNumber})\n\nUpdated via Bill ${billNumber} (PR #${prNumber})\nSee: https://github.com/${owner}/${repo}/pull/${prNumber}`;
+
+      await commitFile(
+        `statutes/${slug}.md`,
+        commitMessage,
+        STATUTE_AUTHOR,
+        lawsRepoPath,
+      );
+      await push("main", lawsRepoPath);
+      console.log(`  📜 Updated statute: ${statuteName}`);
+    } catch (e) {
+      console.warn(`  ⚠️ Failed to refresh statute "${slug}": ${e}`);
+    }
+  }
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  extractAffectedStatutes,
   safeBranchName,
   safeFilePath,
   sanitizeForGit,
@@ -105,5 +106,61 @@ describe("safeFilePath", () => {
   it("strips path traversal characters from filename", () => {
     // "../" chars get stripped, leaving "etc" which is safe
     expect(safeFilePath("bills", "../../etc")).toBe("bills/etc.md");
+  });
+
+  it("accepts nested directory paths", () => {
+    expect(safeFilePath("bills/44-1", "c-11")).toBe("bills/44-1/c-11.md");
+  });
+
+  it("rejects directory paths with '..'", () => {
+    expect(() => safeFilePath("bills/../etc", "c-11")).toThrow(
+      "Invalid directory path",
+    );
+  });
+
+  it("rejects directory paths with empty segments", () => {
+    expect(() => safeFilePath("bills//44-1", "c-11")).toThrow(
+      "Invalid directory path",
+    );
+  });
+});
+
+describe("extractAffectedStatutes", () => {
+  it("simple amendment", () => {
+    expect(
+      extractAffectedStatutes("An Act to amend the Broadcasting Act"),
+    ).toEqual(["broadcasting-act"]);
+  });
+
+  it("multiple acts", () => {
+    expect(
+      extractAffectedStatutes(
+        "An Act to amend the Criminal Code and the Customs Act",
+      ),
+    ).toEqual(["criminal-code", "customs-act"]);
+  });
+
+  it("three acts with commas", () => {
+    expect(
+      extractAffectedStatutes(
+        "An Act to amend the Criminal Code, the Youth Criminal Justice Act and the National Defence Act",
+      ),
+    ).toEqual([
+      "criminal-code",
+      "youth-criminal-justice-act",
+      "national-defence-act",
+    ]);
+  });
+
+  it("non-amendment returns empty", () => {
+    expect(extractAffectedStatutes("An Act to establish a commission")).toEqual(
+      [],
+    );
+  });
+
+  it("code type", () => {
+    expect(
+      extractAffectedStatutes("An Act to amend the Canada Labour Code"),
+    ).toEqual(["canada-labour-code"]);
   });
 });

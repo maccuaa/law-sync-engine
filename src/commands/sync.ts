@@ -24,6 +24,7 @@ import {
 } from "../github/rest.js";
 import { parseBillXml } from "../parsers/bill-xml.js";
 import {
+  extractAffectedStatutes,
   safeBranchName,
   safeFilePath,
   sanitizeForGit,
@@ -227,8 +228,13 @@ export async function sync(options: SyncOptions = {}): Promise<void> {
       await checkoutMain(lawsRepoPath);
       await createBranch(branchName, lawsRepoPath);
 
-      const relativePath = safeFilePath("bills", validatedNumber.toLowerCase());
-      await mkdir(resolve(lawsRepoPath, "bills"), { recursive: true });
+      const relativePath = safeFilePath(
+        `bills/${session}`,
+        validatedNumber.toLowerCase(),
+      );
+      await mkdir(resolve(lawsRepoPath, `bills/${session}`), {
+        recursive: true,
+      });
       const filePath = resolve(lawsRepoPath, relativePath);
       await Bun.write(filePath, markdown);
 
@@ -299,7 +305,7 @@ function buildPrBody(bill: Bill, session: string, author: string): string {
   const longTitle = bill.name.en;
   const sponsorName = author.split(" <")[0];
 
-  return [
+  const lines = [
     `## ${longTitle}`,
     "",
     shortTitle ? `**Short Title:** ${shortTitle}` : "",
@@ -314,10 +320,27 @@ function buildPrBody(bill: Bill, session: string, author: string): string {
     `- [OpenParliament](https://openparliament.ca${bill.url})`,
     `- [LEGISinfo](https://www.parl.ca/legisinfo/en/bill/${session}/${bill.number.toLowerCase()})`,
     bill.text_url ? `- [Full Text](${bill.text_url})` : "",
-    "",
-    "---",
+  ];
+
+  // Add affected statutes section
+  const affectedSlugs = extractAffectedStatutes(longTitle);
+  if (affectedSlugs.length > 0) {
+    lines.push("");
+    lines.push("### Affected Statutes");
+    lines.push("");
+    lines.push("This bill may amend the following statutes:");
+    for (const slug of affectedSlugs) {
+      lines.push(
+        `- [\`${slug}.md\`](https://github.com/maccuaa/canadian-laws/blob/main/statutes/${slug}.md)`,
+      );
+    }
+  }
+
+  lines.push("");
+  lines.push("---");
+  lines.push(
     "*This PR was automatically created by [law-sync-engine](https://github.com/maccuaa/law-sync-engine).*",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  );
+
+  return lines.filter(Boolean).join("\n");
 }
