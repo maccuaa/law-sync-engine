@@ -96,11 +96,22 @@ function apiUrl(path: string, params?: Record<string, string>): string {
 }
 
 export async function getCurrentSession(): Promise<string> {
-  const url = apiUrl("/bills/", { limit: "1", offset: "0" });
+  // Find the most recently introduced bill to determine the current session.
+  // The default list order is not by date, so we filter to recent bills.
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+  const dateStr = oneYearAgo.toISOString().split("T")[0];
+
+  const url = apiUrl("/bills/", {
+    introduced__gte: dateStr,
+    limit: "1",
+  });
   const response = await rateLimitedFetch(url);
   const data = BillsListResponseSchema.parse(await response.json());
   if (data.objects.length === 0) {
-    throw new Error("No bills found to detect current session");
+    throw new Error(
+      "No bills found in the last year to detect current session",
+    );
   }
   return data.objects[0].session;
 }
