@@ -24,11 +24,15 @@ describe("validateBillNumber", () => {
   });
 
   it("rejects path traversal attempts", () => {
-    expect(() => validateBillNumber("../../../etc")).toThrow("Invalid bill number");
+    expect(() => validateBillNumber("../../../etc")).toThrow(
+      "Invalid bill number",
+    );
   });
 
   it("rejects numbers with newlines", () => {
-    expect(() => validateBillNumber("C-1\n--no-verify")).toThrow("Invalid bill number");
+    expect(() => validateBillNumber("C-1\n--no-verify")).toThrow(
+      "Invalid bill number",
+    );
   });
 
   it("rejects empty strings", () => {
@@ -36,7 +40,9 @@ describe("validateBillNumber", () => {
   });
 
   it("rejects arbitrary strings", () => {
-    expect(() => validateBillNumber("not-a-bill")).toThrow("Invalid bill number");
+    expect(() => validateBillNumber("not-a-bill")).toThrow(
+      "Invalid bill number",
+    );
   });
 });
 
@@ -61,12 +67,15 @@ describe("sanitizeForGit", () => {
 
 describe("sanitizeGitAuthor", () => {
   it("builds a safe author string", () => {
-    expect(sanitizeGitAuthor("Pablo Rodriguez", "pablo.rodriguez@parl.gc.ca"))
-      .toBe("Pablo Rodriguez <pablo.rodriguez@parl.gc.ca>");
+    expect(
+      sanitizeGitAuthor("Pablo Rodriguez", "pablo.rodriguez@parl.gc.ca"),
+    ).toBe("Pablo Rodriguez <pablo.rodriguez@parl.gc.ca>");
   });
 
   it("strips invalid chars from email", () => {
-    expect(sanitizeGitAuthor("Test", "test\n@evil.com")).toBe("Test <test@evil.com>");
+    expect(sanitizeGitAuthor("Test", "test\n@evil.com")).toBe(
+      "Test <test@evil.com>",
+    );
   });
 });
 

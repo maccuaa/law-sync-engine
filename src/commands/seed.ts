@@ -1,8 +1,7 @@
-import { resolve } from "path";
+import { resolve } from "node:path";
 import { fetchStatuteXml } from "../api/justice-laws.js";
 import { getConfig } from "../config.js";
-import { checkoutMain, commitFile, push } from "../git/operations.js";
-import { gitExec } from "../git/operations.js";
+import { checkoutMain, commitFile, gitExec, push } from "../git/operations.js";
 import { parseStatuteXml } from "../parsers/justice-laws-xml.js";
 
 const TARGET_STATUTES = [
@@ -68,7 +67,9 @@ export async function seed(): Promise<void> {
   if (successCount > 0) {
     console.log("\n🚀 Pushing to origin...");
     // Record current HEAD so we can rollback on push failure
-    const headBefore = (await gitExec(["rev-parse", "HEAD"], lawsRepoPath)).trim();
+    const _headBefore = (
+      await gitExec(["rev-parse", "HEAD"], lawsRepoPath)
+    ).trim();
     try {
       await push("main", lawsRepoPath);
       console.log("✅ Pushed to origin/main");
@@ -77,12 +78,16 @@ export async function seed(): Promise<void> {
       console.log("🔄 Rolling back local commits...");
       try {
         // Find the commit before our seed commits
-        const originMain = (await gitExec(["rev-parse", "origin/main"], lawsRepoPath)).trim();
+        const originMain = (
+          await gitExec(["rev-parse", "origin/main"], lawsRepoPath)
+        ).trim();
         await gitExec(["reset", "--hard", originMain], lawsRepoPath);
         console.log("✅ Rolled back to origin/main. Local repo is clean.");
       } catch (rollbackError) {
         console.error(`❌ Rollback also failed: ${rollbackError}`);
-        console.error(`   Manual fix: cd ${lawsRepoPath} && git reset --hard origin/main`);
+        console.error(
+          `   Manual fix: cd ${lawsRepoPath} && git reset --hard origin/main`,
+        );
       }
     }
   }

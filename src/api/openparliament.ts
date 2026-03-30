@@ -102,10 +102,7 @@ export async function listBills(session: string): Promise<Bill[]> {
   return bills;
 }
 
-export async function getBill(
-  session: string,
-  number: string,
-): Promise<Bill> {
+export async function getBill(session: string, number: string): Promise<Bill> {
   const url = apiUrl(`/bills/${session}/${number}/`);
   const response = await rateLimitedFetch(url);
   const data = BillSchema.parse(await response.json());

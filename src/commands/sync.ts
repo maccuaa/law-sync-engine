@@ -1,12 +1,12 @@
-import { mkdir } from "fs/promises";
-import { resolve } from "path";
+import { mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
 import { fetchBillXml, getBillXmlUrl } from "../api/legisinfo.js";
+import type { Bill } from "../api/openparliament.js";
 import {
   getCurrentSession,
   getPolitician,
   listBills,
 } from "../api/openparliament.js";
-import type { Bill } from "../api/openparliament.js";
 import { getConfig } from "../config.js";
 import {
   branchExists,
@@ -55,15 +55,15 @@ export async function sync(): Promise<void> {
         continue;
       }
 
-      console.log(`\n🆕 New bill: ${validatedNumber} — ${sanitizeForGit(bill.name.en)}`);
+      console.log(
+        `\n🆕 New bill: ${validatedNumber} — ${sanitizeForGit(bill.name.en)}`,
+      );
 
       // Fetch sponsor MP details
       let author = "Parliament of Canada <info@parl.gc.ca>";
       if (bill.sponsor_politician_url) {
         try {
-          const politician = await getPolitician(
-            bill.sponsor_politician_url,
-          );
+          const politician = await getPolitician(bill.sponsor_politician_url);
           if (politician.email) {
             author = sanitizeGitAuthor(politician.name, politician.email);
           }

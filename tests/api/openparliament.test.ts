@@ -13,9 +13,7 @@ describe("BillSchema", () => {
     expect(result.number).toBe("C-11");
     expect(result.name.en).toContain("Broadcasting Act");
     expect(result.law).toBe(true);
-    expect(result.sponsor_politician_url).toBe(
-      "/politicians/pablo-rodriguez/",
-    );
+    expect(result.sponsor_politician_url).toBe("/politicians/pablo-rodriguez/");
     expect(result.vote_urls).toEqual(["/votes/44-1/292/"]);
     expect(result.url).toBe("/bills/44-1/C-11/");
   });

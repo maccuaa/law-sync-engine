@@ -1,10 +1,10 @@
 import {
-  createXmlParser,
   createOrderPreservingParser,
-  extractText,
+  createXmlParser,
   ensureArray,
-  generateFrontmatter,
+  extractText,
   findOrderedElement,
+  generateFrontmatter,
   renderOrderedBody,
 } from "./shared.js";
 

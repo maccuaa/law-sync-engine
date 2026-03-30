@@ -1,9 +1,9 @@
 import {
-  createXmlParser,
   createOrderPreservingParser,
+  createXmlParser,
   extractText,
-  generateFrontmatter,
   findOrderedElement,
+  generateFrontmatter,
   renderOrderedBody,
 } from "./shared.js";
 
@@ -30,7 +30,12 @@ export function parseStatuteXml(
     (statute["@_lims:pit-date"] as string) ||
     "";
 
-  const metadata: StatuteMetadata = { longTitle, shortTitle, actId, lastAmended };
+  const metadata: StatuteMetadata = {
+    longTitle,
+    shortTitle,
+    actId,
+    lastAmended,
+  };
 
   const frontmatter = generateFrontmatter({
     title: shortTitle || longTitle,
@@ -46,12 +51,7 @@ export function parseStatuteXml(
   const orderedParsed = orderParser.parse(xml);
   const bodyOrdered = findOrderedElement(orderedParsed, "Statute", "Body");
 
-  const lines: string[] = [
-    frontmatter,
-    "",
-    `# ${shortTitle || longTitle}`,
-    "",
-  ];
+  const lines: string[] = [frontmatter, "", `# ${shortTitle || longTitle}`, ""];
 
   if (bodyOrdered) {
     lines.push(renderOrderedBody(bodyOrdered));

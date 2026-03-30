@@ -28,9 +28,7 @@ export async function getBillXmlUrl(
       if (match) {
         return `${PARL_CA_BASE}${match[1]}`;
       }
-    } catch {
-      continue;
-    }
+    } catch {}
   }
   return null;
 }

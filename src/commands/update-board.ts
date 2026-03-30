@@ -1,10 +1,9 @@
-import { getCurrentSession, listBills } from "../api/openparliament.js";
 import type { Bill } from "../api/openparliament.js";
-import { getConfig, PROJECT_BOARD_COLUMNS } from "../config.js";
+import { getCurrentSession, listBills } from "../api/openparliament.js";
 import type { BoardColumn } from "../config.js";
+import { getConfig } from "../config.js";
 import {
   addItemToProject,
-  getProjectFields,
   getProjectId,
   getProjectItems,
   updateItemField,
@@ -68,7 +67,7 @@ export async function updateBoard(): Promise<void> {
   const stageField = project.fields.find(
     (f) => f.name === "Stage" || f.name === "Status",
   );
-  if (!stageField || !stageField.options) {
+  if (!stageField?.options) {
     console.error(
       "❌ No 'Stage' or 'Status' single-select field found on the project.",
     );
@@ -82,16 +81,14 @@ export async function updateBoard(): Promise<void> {
     `  🏷️ Stage field: ${stageField.name} with ${stageField.options.length} options`,
   );
 
-  const optionsByName = new Map(
-    stageField.options.map((o) => [o.name, o.id]),
-  );
+  const optionsByName = new Map(stageField.options.map((o) => [o.name, o.id]));
 
   // 3. Get existing project items
   const existingItems = await getProjectItems(project.id);
   const itemsByPrNumber = new Map(
     existingItems
       .filter((item) => item.content?.number)
-      .map((item) => [item.content!.number, item]),
+      .map((item) => [item.content?.number, item]),
   );
 
   // 4. Get open PRs (Octokit returns node_id)
@@ -143,9 +140,7 @@ export async function updateBoard(): Promise<void> {
       }
     } else {
       // Update position if needed
-      console.log(
-        `  🔄 PR #${pr.number} (${billNumber}) → ${targetColumn}`,
-      );
+      console.log(`  🔄 PR #${pr.number} (${billNumber}) → ${targetColumn}`);
       try {
         await updateItemField(
           project.id,

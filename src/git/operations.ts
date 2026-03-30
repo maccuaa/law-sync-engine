@@ -1,7 +1,4 @@
-export async function gitExec(
-  args: string[],
-  cwd: string,
-): Promise<string> {
+export async function gitExec(args: string[], cwd: string): Promise<string> {
   const proc = Bun.spawn(["git", ...args], {
     cwd,
     stdout: "pipe",
@@ -49,10 +46,7 @@ export async function commitFile(
   await gitExec(["commit", "-m", message, "--author", author], cwd);
 }
 
-export async function push(
-  branchName: string,
-  cwd: string,
-): Promise<void> {
+export async function push(branchName: string, cwd: string): Promise<void> {
   await gitExec(["push", "origin", branchName], cwd);
 }
 
@@ -66,10 +60,7 @@ export async function branchExists(
   } catch {
     // Check remote
     try {
-      await gitExec(
-        ["rev-parse", "--verify", `origin/${branchName}`],
-        cwd,
-      );
+      await gitExec(["rev-parse", "--verify", `origin/${branchName}`], cwd);
       return true;
     } catch {
       return false;

@@ -202,7 +202,9 @@ export function extractOrderedText(nodes: OrderedNode[]): string {
     if ("#text" in node) {
       parts.push(String(node["#text"]));
     } else if ("DefinedTermEn" in node) {
-      parts.push(`**${extractOrderedText(node.DefinedTermEn as OrderedNode[])}**`);
+      parts.push(
+        `**${extractOrderedText(node.DefinedTermEn as OrderedNode[])}**`,
+      );
     } else if ("XRefExternal" in node) {
       parts.push(extractOrderedText(node.XRefExternal as OrderedNode[]));
     } else if ("Keep" in node) {
@@ -219,10 +221,7 @@ export function extractOrderedText(nodes: OrderedNode[]): string {
 }
 
 /** Get the first child text for a given tag in preserveOrder children array. */
-function getOrderedChildText(
-  children: OrderedNode[],
-  tagName: string,
-): string {
+function getOrderedChildText(children: OrderedNode[], tagName: string): string {
   for (const child of children) {
     if (tagName in child) {
       return extractOrderedText(child[tagName] as OrderedNode[]);

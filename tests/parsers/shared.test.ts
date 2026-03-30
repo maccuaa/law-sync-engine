@@ -1,17 +1,17 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
+  createOrderPreservingParser,
+  ensureArray,
   extractText,
+  findOrderedElement,
+  generateFrontmatter,
+  renderDefinition,
+  renderHeading,
+  renderMarginalNote,
+  renderOrderedBody,
+  renderParagraph,
   renderSection,
   renderSubsection,
-  renderHeading,
-  renderParagraph,
-  renderDefinition,
-  renderMarginalNote,
-  generateFrontmatter,
-  ensureArray,
-  findOrderedElement,
-  renderOrderedBody,
-  createOrderPreservingParser,
 } from "../../src/parsers/shared.js";
 
 describe("extractText", () => {
@@ -121,9 +121,7 @@ describe("renderSection", () => {
     const result = renderSection(section);
     expect(result).toContain("### Section 1");
     expect(result).toContain("*Short title*");
-    expect(result).toContain(
-      "This Act may be cited as the Broadcasting Act.",
-    );
+    expect(result).toContain("This Act may be cited as the Broadcasting Act.");
   });
 
   it("renders section without subsections gracefully", () => {
@@ -235,7 +233,7 @@ describe("findOrderedElement", () => {
     const parsed = parser.parse(xml);
     const result = findOrderedElement(parsed, "Root", "Body");
     expect(result).not.toBeNull();
-    expect(result!.length).toBeGreaterThan(0);
+    expect(result?.length).toBeGreaterThan(0);
   });
 
   it("returns null for missing path", () => {
@@ -261,8 +259,9 @@ describe("renderOrderedBody", () => {
     const parsed = parser.parse(xml);
     const body = findOrderedElement(parsed, "Body");
     expect(body).not.toBeNull();
+    if (!body) throw new Error("unreachable");
 
-    const result = renderOrderedBody(body!);
+    const result = renderOrderedBody(body);
     const firstIdx = result.indexOf("First");
     const sec1Idx = result.indexOf("Section 1");
     const secondIdx = result.indexOf("Second");
