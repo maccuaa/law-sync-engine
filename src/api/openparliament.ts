@@ -99,32 +99,47 @@ function apiUrl(path: string, params?: Record<string, string>): string {
 }
 
 export async function getCurrentSession(): Promise<string> {
-  // Fetch a batch of recent bills (no date filter) and determine the
-  // most common session. The API returns bills in DB insertion order,
-  // so recent pages will contain current-session bills.
-  const url = apiUrl("/bills/", { limit: "20" });
+  // Fetch recent bills (last 2 years) and return the highest session number.
+  // Session format is "{parliament}-{session}" e.g. "45-1", so lexicographic
+  // comparison of the numeric parts gives the latest.
+  const twoYearsAgo = new Date();
+  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+  const dateStr = twoYearsAgo.toISOString().split("T")[0];
+
+  const url = apiUrl("/bills/", {
+    introduced__gte: dateStr,
+    limit: "500",
+  });
   const response = await rateLimitedFetch(url);
   const data = BillsListResponseSchema.parse(await response.json());
 
   if (data.objects.length === 0) {
     throw new Error(
-      "No bills found on OpenParliament to detect current session",
+      "No bills found in the last 2 years to detect current session",
     );
   }
 
-  // Count occurrences of each session
-  const sessionCounts = new Map<string, number>();
-  for (const bill of data.objects) {
-    sessionCounts.set(bill.session, (sessionCounts.get(bill.session) || 0) + 1);
-  }
-
-  // Return the session with the most bills (most likely current)
+  // Parse session strings and return the highest parliament/session
   let bestSession = data.objects[0].session;
-  let bestCount = 0;
-  for (const [session, count] of sessionCounts) {
-    if (count > bestCount) {
-      bestCount = count;
-      bestSession = session;
+  let bestParlNum = 0;
+  let bestSessNum = 0;
+
+  const seen = new Set<string>();
+  for (const bill of data.objects) {
+    if (seen.has(bill.session)) continue;
+    seen.add(bill.session);
+
+    const parts = bill.session.split("-");
+    const parlNum = Number.parseInt(parts[0], 10);
+    const sessNum = Number.parseInt(parts[1], 10);
+
+    if (
+      parlNum > bestParlNum ||
+      (parlNum === bestParlNum && sessNum > bestSessNum)
+    ) {
+      bestParlNum = parlNum;
+      bestSessNum = sessNum;
+      bestSession = bill.session;
     }
   }
 

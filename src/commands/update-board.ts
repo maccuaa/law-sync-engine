@@ -87,10 +87,10 @@ export async function updateBoard(): Promise<void> {
   }
   console.log(`  📊 Found project: ${project.title}`);
 
-  // 2. Find the "Stage" / "Status" field
-  const stageField = project.fields.find(
-    (f) => f.name === "Stage" || f.name === "Status",
-  );
+  // 2. Find the "Stage" field (prefer over generic "Status")
+  const stageField =
+    project.fields.find((f) => f.name === "Stage") ||
+    project.fields.find((f) => f.name === "Status");
   if (!stageField?.options) {
     console.error(
       "❌ No 'Stage' or 'Status' single-select field found on the project.",
