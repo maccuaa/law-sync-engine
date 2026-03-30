@@ -19,7 +19,7 @@ export function getConfig(): Config {
   return _config;
 }
 
-export const OPENPARLIAMENT_BASE = "https://openparliament.ca";
+export const OPENPARLIAMENT_BASE = "https://api.openparliament.ca";
 export const JUSTICE_LAWS_BASE = "https://laws-lois.justice.gc.ca";
 export const PARL_CA_BASE = "https://www.parl.ca";
 

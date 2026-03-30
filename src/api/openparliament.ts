@@ -48,19 +48,45 @@ const BillsListResponseSchema = z.object({
 });
 
 const RATE_LIMIT_MS = 300;
+const MAX_RETRIES = 3;
+const USER_AGENT =
+  "law-sync-engine/0.1.0 (https://github.com/maccuaa/law-sync-engine)";
+
+const API_HEADERS: Record<string, string> = {
+  Accept: "application/json",
+  "API-Version": "v1",
+  "User-Agent": USER_AGENT,
+};
 
 async function rateLimitedFetch(url: string): Promise<Response> {
   await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_MS));
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`OpenParliament API error: ${response.status} for ${url}`);
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const response = await fetch(url, { headers: API_HEADERS });
+
+    if (response.status === 429) {
+      const retryAfter = Number(response.headers.get("Retry-After")) || 5;
+      const backoff = retryAfter * 1000 * attempt;
+      console.warn(
+        `  ⏳ Rate limited (429), retrying in ${backoff / 1000}s (attempt ${attempt}/${MAX_RETRIES})`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+      continue;
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `OpenParliament API error: ${response.status} for ${url}`,
+      );
+    }
+    return response;
   }
-  return response;
+
+  throw new Error(`OpenParliament API: max retries exceeded for ${url}`);
 }
 
 function apiUrl(path: string, params?: Record<string, string>): string {
   const url = new URL(path, OPENPARLIAMENT_BASE);
-  url.searchParams.set("format", "json");
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       url.searchParams.set(key, value);
