@@ -1,5 +1,9 @@
 import type { Bill } from "../api/openparliament.js";
-import { getCurrentSession, listBills } from "../api/openparliament.js";
+import {
+  getBill,
+  getCurrentSession,
+  listBills,
+} from "../api/openparliament.js";
 import type { BoardColumn } from "../config.js";
 import { getConfig } from "../config.js";
 import {
@@ -10,37 +14,34 @@ import {
 } from "../github/graphql.js";
 import { listOpenPullRequests } from "../github/rest.js";
 
-const STATUS_MAP: Record<string, BoardColumn> = {
-  introduced: "First Reading",
-  "first reading": "First Reading",
-  "passed first reading": "First Reading",
-  "second reading": "Second Reading",
-  "passed second reading": "Second Reading",
-  "in committee": "Committee",
-  committee: "Committee",
-  "reported with amendments": "Report Stage",
-  "report stage": "Report Stage",
-  "third reading": "Third Reading",
-  "passed third reading": "Third Reading",
-  "passed house": "Senate",
-  "in senate": "Senate",
-  senate: "Senate",
-  "passed senate": "Senate",
-  "royal assent": "Royal Assent",
-  defeated: "Defeated",
-  withdrawn: "Defeated",
-  "died on the order paper": "Defeated",
+// Map OpenParliament status_code values to board columns.
+// Source: https://github.com/michaelmulley/openparliament
+const STATUS_CODE_MAP: Record<string, BoardColumn> = {
+  Introduced: "First Reading",
+  HouseAtFirstReading: "First Reading",
+  HouseAt2ndReading: "Second Reading",
+  HousePassed2ndReading: "Second Reading",
+  HouseInCommittee: "Committee",
+  HouseCommitteeReported: "Report Stage",
+  HouseAtReportStage: "Report Stage",
+  HouseAt3rdReading: "Third Reading",
+  HousePassed3rdReading: "Third Reading",
+  SenateAtFirstReading: "Senate",
+  SenateAt2ndReading: "Senate",
+  SenateInCommittee: "Senate",
+  SenateAt3rdReading: "Senate",
+  SenatePassed3rdReading: "Senate",
+  RoyalAssentGiven: "Royal Assent",
+  BillDefeated: "Defeated",
+  BillWithdrawn: "Defeated",
+  BillNotProceededWith: "Defeated",
 };
 
 export function mapStatusToColumn(bill: Bill): BoardColumn {
   if (bill.law) return "Royal Assent";
-  return "First Reading";
-}
-
-export function mapStatusStringToColumn(status: string): BoardColumn {
-  const normalized = status.toLowerCase().trim();
-  for (const [pattern, column] of Object.entries(STATUS_MAP)) {
-    if (normalized.includes(pattern)) return column;
+  if (bill.status_code) {
+    const mapped = STATUS_CODE_MAP[bill.status_code];
+    if (mapped) return mapped;
   }
   return "First Reading";
 }
@@ -95,7 +96,7 @@ export async function updateBoard(): Promise<void> {
   const openPrs = await listOpenPullRequests(owner, repo);
   console.log(`  📝 Found ${openPrs.length} open PRs`);
 
-  // 5. Get current session bills
+  // 5. Get current session bills (list endpoint for quick lookup)
   const session = await getCurrentSession();
   const bills = await listBills(session);
   const billsByNumber = new Map(bills.map((b) => [b.number, b]));
@@ -109,7 +110,16 @@ export async function updateBoard(): Promise<void> {
     if (!billMatch) continue;
 
     const billNumber = billMatch[1].toUpperCase();
-    const bill = billsByNumber.get(billNumber);
+    let bill = billsByNumber.get(billNumber);
+
+    // Fetch bill detail for status_code (not available in list endpoint)
+    if (bill) {
+      try {
+        bill = await getBill(session, billNumber);
+      } catch {
+        // Fall back to list data if detail fetch fails
+      }
+    }
 
     const targetColumn = bill ? mapStatusToColumn(bill) : "First Reading";
     const targetOptionId = optionsByName.get(targetColumn);

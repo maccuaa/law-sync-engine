@@ -13,6 +13,7 @@ const BillSchema = z.object({
     .optional(),
   home_chamber: z.string().nullable().optional(),
   law: z.boolean().nullable().optional(),
+  status_code: z.string().nullable().optional(),
   sponsor_politician_url: z.string().nullable().optional(),
   text_url: z.string().nullable().optional(),
   vote_urls: z.array(z.string()).nullable().optional(),
@@ -119,7 +120,7 @@ export async function getCurrentSession(): Promise<string> {
 export async function listBills(session: string): Promise<Bill[]> {
   const bills: Bill[] = [];
   let offset = 0;
-  const limit = 20;
+  const limit = 500; // API max is 500 per page
 
   while (true) {
     const url = apiUrl("/bills/", {
