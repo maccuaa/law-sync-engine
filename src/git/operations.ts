@@ -46,9 +46,18 @@ export async function commitFile(
   message: string,
   author: string,
   cwd: string,
-): Promise<void> {
+): Promise<boolean> {
   await gitExec(["add", filePath], cwd);
+  // Check if there are staged changes before committing
+  try {
+    await gitExec(["diff", "--cached", "--quiet"], cwd);
+    // Exit 0 means no changes — nothing to commit
+    return false;
+  } catch {
+    // Exit 1 means there ARE changes — proceed with commit
+  }
   await gitExec(["commit", "-m", message, "--author", author], cwd);
+  return true;
 }
 
 export async function push(branchName: string, cwd: string): Promise<void> {

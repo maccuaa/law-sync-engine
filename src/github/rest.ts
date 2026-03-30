@@ -44,20 +44,38 @@ function getOctokit(): InstanceType<typeof ThrottledOctokit> {
 export async function createPullRequest(params: PullRequestParams) {
   const octokit = getOctokit();
 
-  const { data: pr } = await octokit.rest.pulls.create({
-    owner: params.owner,
-    repo: params.repo,
-    title: params.title,
-    body: params.body,
-    head: params.head,
-    base: params.base,
-  });
+  try {
+    const { data: pr } = await octokit.rest.pulls.create({
+      owner: params.owner,
+      repo: params.repo,
+      title: params.title,
+      body: params.body,
+      head: params.head,
+      base: params.base,
+    });
 
-  if (params.labels?.length) {
-    await addLabels(params.owner, params.repo, pr.number, params.labels);
+    if (params.labels?.length) {
+      await addLabels(params.owner, params.repo, pr.number, params.labels);
+    }
+
+    return pr;
+  } catch (error: unknown) {
+    // Handle retry-induced "already exists" — the first attempt may have
+    // succeeded but timed out, causing the retry plugin to re-send the POST.
+    const message =
+      error instanceof Error ? error.message : String(error ?? "");
+    if (message.includes("A pull request already exists")) {
+      const existing = await findPullRequestByHead(
+        params.owner,
+        params.repo,
+        params.head,
+      );
+      if (existing && existing.state === "open") {
+        return { number: existing.number, html_url: existing.html_url };
+      }
+    }
+    throw error;
   }
-
-  return pr;
 }
 
 export async function addLabels(

@@ -281,14 +281,18 @@ async function refreshAffectedStatutes(
       const statuteName = metadata.shortTitle || metadata.longTitle;
       const commitMessage = `law: update ${statuteName} (Royal Assent: Bill ${billNumber})\n\nUpdated via Bill ${billNumber} (PR #${prNumber})\nSee: https://github.com/${owner}/${repo}/pull/${prNumber}`;
 
-      await commitFile(
+      const changed = await commitFile(
         `statutes/${slug}.md`,
         commitMessage,
         STATUTE_AUTHOR,
         lawsRepoPath,
       );
-      await push("main", lawsRepoPath);
-      console.log(`  📜 Updated statute: ${statuteName}`);
+      if (changed) {
+        await push("main", lawsRepoPath);
+        console.log(`  📜 Updated statute: ${statuteName}`);
+      } else {
+        console.log(`  📜 Statute already up to date: ${statuteName}`);
+      }
     } catch (e) {
       console.warn(`  ⚠️ Failed to refresh statute "${slug}": ${e}`);
     }

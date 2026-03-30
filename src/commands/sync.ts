@@ -390,14 +390,16 @@ async function ensureMissingStatutes(
       await Bun.write(statutePath, markdown);
 
       const statuteName = metadata.shortTitle || metadata.longTitle;
-      await commitFile(
+      const changed = await commitFile(
         `statutes/${slug}.md`,
         `feat: add ${statuteName}\n\nAct ID: ${actId}\nSource: https://laws-lois.justice.gc.ca/eng/acts/${actId.toLowerCase()}/`,
         STATUTE_AUTHOR,
         lawsRepoPath,
       );
-      await push("main", lawsRepoPath);
-      console.log(`  📜 Seeded statute: ${statuteName}`);
+      if (changed) {
+        await push("main", lawsRepoPath);
+        console.log(`  📜 Seeded statute: ${statuteName}`);
+      }
     } catch (e) {
       console.warn(`  ⚠️ Could not fetch statute "${slug}" (${actId}): ${e}`);
     }
