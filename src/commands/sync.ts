@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { fetchBillXml, getBillXmlUrl } from "../api/legisinfo.js";
 import type { Bill } from "../api/openparliament.js";
 import {
+  getBill,
   getCurrentSession,
   getPolitician,
   listBills,
@@ -66,11 +67,21 @@ export async function sync(): Promise<void> {
         console.log(
           `\n🔧 Recovering orphan branch ${branchName} — creating PR...`,
         );
-        const safeTitle = sanitizeForGit(bill.short_title?.en || bill.name.en);
+        let fullBill = bill;
+        try {
+          fullBill = await getBill(session, validatedNumber);
+        } catch {
+          // Use list data as fallback
+        }
+        const safeTitle = sanitizeForGit(
+          fullBill.short_title?.en || fullBill.name.en,
+        );
         let author = "Parliament of Canada <info@parl.gc.ca>";
-        if (bill.sponsor_politician_url) {
+        if (fullBill.sponsor_politician_url) {
           try {
-            const politician = await getPolitician(bill.sponsor_politician_url);
+            const politician = await getPolitician(
+              fullBill.sponsor_politician_url,
+            );
             if (politician.email) {
               author = sanitizeGitAuthor(politician.name, politician.email);
             }
@@ -79,7 +90,7 @@ export async function sync(): Promise<void> {
           }
         }
         try {
-          const prBody = buildPrBody(bill, session, author);
+          const prBody = buildPrBody(fullBill, session, author);
           const pr = await createPullRequest({
             owner,
             repo,
@@ -90,13 +101,15 @@ export async function sync(): Promise<void> {
           });
           console.log(`  📝 Recovered PR #${pr.number}: ${pr.html_url}`);
           const labels = ["bill", session];
-          if (bill.home_chamber === "House") labels.push("house");
-          if (bill.home_chamber === "Senate") labels.push("senate");
+          if (fullBill.home_chamber === "House") labels.push("house");
+          if (fullBill.home_chamber === "Senate") labels.push("senate");
           try {
             await addLabels(owner, repo, pr.number, labels);
           } catch {
             // Non-fatal
           }
+          // Gentle delay to avoid GitHub secondary rate limits
+          await new Promise((r) => setTimeout(r, 1000));
           newCount++;
         } catch (e) {
           console.error(`  ❌ Failed to recover PR for ${branchName}: ${e}`);
@@ -109,11 +122,21 @@ export async function sync(): Promise<void> {
         `\n🆕 New bill: ${validatedNumber} — ${sanitizeForGit(bill.name.en)}`,
       );
 
+      // Fetch full bill details (list endpoint only has minimal fields)
+      let fullBill = bill;
+      try {
+        fullBill = await getBill(session, validatedNumber);
+      } catch (e) {
+        console.warn(`  ⚠️ Could not fetch bill details, using list data: ${e}`);
+      }
+
       // Fetch sponsor MP details
       let author = "Parliament of Canada <info@parl.gc.ca>";
-      if (bill.sponsor_politician_url) {
+      if (fullBill.sponsor_politician_url) {
         try {
-          const politician = await getPolitician(bill.sponsor_politician_url);
+          const politician = await getPolitician(
+            fullBill.sponsor_politician_url,
+          );
           if (politician.email) {
             author = sanitizeGitAuthor(politician.name, politician.email);
           }
@@ -133,23 +156,25 @@ export async function sync(): Promise<void> {
         markdown = parsed.markdown;
       } else {
         console.warn("  ⚠️ No XML available, creating placeholder");
-        const safeTitle = sanitizeForGit(bill.short_title?.en || bill.name.en);
+        const safeTitle = sanitizeForGit(
+          fullBill.short_title?.en || fullBill.name.en,
+        );
         markdown = [
           "---",
           `bill_number: "${validatedNumber}"`,
           `title: "${safeTitle}"`,
           `session: "${session}"`,
-          `introduced: "${bill.introduced || "unknown"}"`,
+          `introduced: "${fullBill.introduced || "unknown"}"`,
           "---",
           "",
           `# Bill ${validatedNumber} — ${safeTitle}`,
           "",
-          `> ${sanitizeForGit(bill.name.en)}`,
+          `> ${sanitizeForGit(fullBill.name.en)}`,
           "",
           "*Bill text not yet available in XML format.*",
           "",
           `[View on LEGISinfo](https://www.parl.ca/legisinfo/en/bill/${session}/${validatedNumber.toLowerCase()})`,
-          `[View on OpenParliament](https://openparliament.ca${bill.url})`,
+          `[View on OpenParliament](https://openparliament.ca${fullBill.url})`,
           "",
         ].join("\n");
       }
@@ -163,11 +188,13 @@ export async function sync(): Promise<void> {
       const filePath = resolve(lawsRepoPath, relativePath);
       await Bun.write(filePath, markdown);
 
-      const safeTitle = sanitizeForGit(bill.short_title?.en || bill.name.en);
+      const safeTitle = sanitizeForGit(
+        fullBill.short_title?.en || fullBill.name.en,
+      );
       const sponsorName = sanitizeForGit(author.split(" <")[0]);
       await commitFile(
         relativePath,
-        `feat: introduce Bill ${validatedNumber} — ${safeTitle}\n\nSponsored by: ${sponsorName}\nSession: ${session}\nIntroduced: ${bill.introduced || "unknown"}`,
+        `feat: introduce Bill ${validatedNumber} — ${safeTitle}\n\nSponsored by: ${sponsorName}\nSession: ${session}\nIntroduced: ${fullBill.introduced || "unknown"}`,
         author,
         lawsRepoPath,
       );
@@ -176,7 +203,7 @@ export async function sync(): Promise<void> {
       console.log(`  📤 Pushed branch ${branchName}`);
 
       // Create PR
-      const prBody = buildPrBody(bill, session, author);
+      const prBody = buildPrBody(fullBill, session, author);
 
       const pr = await createPullRequest({
         owner,
@@ -190,13 +217,16 @@ export async function sync(): Promise<void> {
 
       // Add labels
       const labels = ["bill", session];
-      if (bill.home_chamber === "House") labels.push("house");
-      if (bill.home_chamber === "Senate") labels.push("senate");
+      if (fullBill.home_chamber === "House") labels.push("house");
+      if (fullBill.home_chamber === "Senate") labels.push("senate");
       try {
         await addLabels(owner, repo, pr.number, labels);
       } catch (e) {
         console.warn(`  ⚠️ Could not add labels: ${e}`);
       }
+
+      // Gentle delay to avoid GitHub secondary rate limits
+      await new Promise((r) => setTimeout(r, 1000));
 
       await checkoutMain(lawsRepoPath);
       newCount++;

@@ -1,12 +1,42 @@
+import { retry } from "@octokit/plugin-retry";
+import { throttling } from "@octokit/plugin-throttling";
 import { Octokit } from "octokit";
 import { getConfig } from "../config.js";
 import type { IssueParams, PullRequestParams } from "./types.js";
 
-let _octokit: Octokit | null = null;
+const ThrottledOctokit = Octokit.plugin(retry, throttling);
 
-function getOctokit(): Octokit {
+let _octokit: InstanceType<typeof ThrottledOctokit> | null = null;
+
+function getOctokit(): InstanceType<typeof ThrottledOctokit> {
   if (!_octokit) {
-    _octokit = new Octokit({ auth: getConfig().GITHUB_TOKEN });
+    _octokit = new ThrottledOctokit({
+      auth: getConfig().GITHUB_TOKEN,
+      throttle: {
+        onRateLimit: (
+          retryAfter: number,
+          _options: Record<string, unknown>,
+          _octokit: unknown,
+          retryCount: number,
+        ) => {
+          console.warn(
+            `  ⏳ GitHub rate limit hit, retrying in ${retryAfter}s (attempt ${retryCount + 1})`,
+          );
+          return retryCount < 3;
+        },
+        onSecondaryRateLimit: (
+          retryAfter: number,
+          _options: Record<string, unknown>,
+          _octokit: unknown,
+          retryCount: number,
+        ) => {
+          console.warn(
+            `  ⏳ GitHub secondary rate limit, retrying in ${retryAfter}s (attempt ${retryCount + 1})`,
+          );
+          return retryCount < 3;
+        },
+      },
+    });
   }
   return _octokit;
 }
