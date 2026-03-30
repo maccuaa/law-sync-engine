@@ -9,7 +9,7 @@ import {
 } from "../api/openparliament.js";
 import type { BoardColumn } from "../config.js";
 import { getConfig } from "../config.js";
-import { checkoutMain, commitFile, push } from "../git/operations.js";
+import { commitFile, pullMain, push } from "../git/operations.js";
 import {
   addItemToProject,
   getProjectId,
@@ -18,6 +18,7 @@ import {
 } from "../github/graphql.js";
 import {
   closePullRequest,
+  deleteBranch,
   listOpenPullRequests,
   mergePullRequest,
 } from "../github/rest.js";
@@ -150,6 +151,14 @@ export async function updateBoard(): Promise<void> {
         continue;
       }
 
+      // Delete the bill branch after merge
+      try {
+        await deleteBranch(owner, repo, pr.head.ref);
+        console.log(`  🗑️ Deleted branch ${pr.head.ref}`);
+      } catch (e) {
+        console.warn(`  ⚠️ Could not delete branch ${pr.head.ref}: ${e}`);
+      }
+
       // Best-effort statute refresh after merge
       try {
         await refreshAffectedStatutes(
@@ -176,6 +185,14 @@ export async function updateBoard(): Promise<void> {
         closedCount++;
       } catch (e) {
         console.warn(`  ⚠️ Failed to close PR #${pr.number}: ${e}`);
+      }
+
+      // Delete the bill branch after close
+      try {
+        await deleteBranch(owner, repo, pr.head.ref);
+        console.log(`  🗑️ Deleted branch ${pr.head.ref}`);
+      } catch (e) {
+        console.warn(`  ⚠️ Could not delete branch ${pr.head.ref}: ${e}`);
       }
 
       continue;
@@ -242,7 +259,8 @@ async function refreshAffectedStatutes(
 
   if (slugs.length === 0) return;
 
-  await checkoutMain(lawsRepoPath);
+  // Pull latest main (merge created a new commit on remote)
+  await pullMain(lawsRepoPath);
 
   for (const slug of slugs) {
     const actId = await lookupActId(slug);

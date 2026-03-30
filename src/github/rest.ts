@@ -118,6 +118,19 @@ export async function mergePullRequest(
   return data;
 }
 
+export async function deleteBranch(
+  owner: string,
+  repo: string,
+  branch: string,
+) {
+  const octokit = getOctokit();
+  await octokit.rest.git.deleteRef({
+    owner,
+    repo,
+    ref: `heads/${branch}`,
+  });
+}
+
 export async function listOpenPullRequests(owner: string, repo: string) {
   const octokit = getOctokit();
   return octokit.paginate(octokit.rest.pulls.list, {
@@ -132,16 +145,26 @@ export async function findPullRequestByHead(
   owner: string,
   repo: string,
   head: string,
-): Promise<{ number: number; html_url: string } | null> {
+): Promise<{
+  number: number;
+  html_url: string;
+  state: string;
+  merged: boolean;
+} | null> {
   const octokit = getOctokit();
+  // Search all states (open, closed, merged) so we don't re-create PRs for merged branches
   const { data } = await octokit.rest.pulls.list({
     owner,
     repo,
     head: `${owner}:${head}`,
-    state: "open",
+    state: "all",
     per_page: 1,
   });
-  return data.length > 0
-    ? { number: data[0].number, html_url: data[0].html_url }
-    : null;
+  if (data.length === 0) return null;
+  return {
+    number: data[0].number,
+    html_url: data[0].html_url,
+    state: data[0].state,
+    merged: data[0].merged_at !== null,
+  };
 }

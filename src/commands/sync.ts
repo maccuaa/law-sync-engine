@@ -89,6 +89,7 @@ export async function sync(options: SyncOptions = {}): Promise<void> {
         // Branch exists — but does a PR exist too?
         const existingPr = await findPullRequestByHead(owner, repo, branchName);
         if (existingPr) {
+          // PR exists in any state (open, closed, merged) — skip it
           skipCount++;
           continue;
         }

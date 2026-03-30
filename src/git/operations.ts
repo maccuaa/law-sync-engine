@@ -36,6 +36,11 @@ export async function checkoutMain(cwd: string): Promise<void> {
   await gitExec(["checkout", "main"], cwd);
 }
 
+export async function pullMain(cwd: string): Promise<void> {
+  await gitExec(["checkout", "main"], cwd);
+  await gitExec(["pull", "origin", "main"], cwd);
+}
+
 export async function commitFile(
   filePath: string,
   message: string,
