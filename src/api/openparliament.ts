@@ -3,18 +3,19 @@ import { OPENPARLIAMENT_BASE } from "../config.js";
 
 const BillSchema = z.object({
   session: z.string(),
-  legisinfo_id: z.number().optional(),
-  introduced: z.string().optional(),
-  name: z.object({ en: z.string(), fr: z.string().optional() }),
+  legisinfo_id: z.number().nullable().optional(),
+  introduced: z.string().nullable().optional(),
+  name: z.object({ en: z.string(), fr: z.string().nullable().optional() }),
   number: z.string(),
   short_title: z
-    .object({ en: z.string(), fr: z.string().optional() })
+    .object({ en: z.string(), fr: z.string().nullable().optional() })
+    .nullable()
     .optional(),
-  home_chamber: z.string().optional(),
-  law: z.boolean().optional(),
-  sponsor_politician_url: z.string().optional(),
-  text_url: z.string().optional(),
-  vote_urls: z.array(z.string()).optional(),
+  home_chamber: z.string().nullable().optional(),
+  law: z.boolean().nullable().optional(),
+  sponsor_politician_url: z.string().nullable().optional(),
+  text_url: z.string().nullable().optional(),
+  vote_urls: z.array(z.string()).nullable().optional(),
   url: z.string(),
 });
 

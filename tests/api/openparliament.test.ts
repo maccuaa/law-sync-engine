@@ -31,6 +31,24 @@ describe("BillSchema", () => {
     expect(result.text_url).toBeUndefined();
   });
 
+  test("parses a bill with null fields from the API", () => {
+    const result = BillSchema.parse({
+      session: "45-1",
+      number: "C-99",
+      name: { en: "Test Act", fr: null },
+      url: "/bills/45-1/C-99/",
+      introduced: null,
+      short_title: null,
+      home_chamber: null,
+      sponsor_politician_url: null,
+      text_url: null,
+    });
+
+    expect(result.number).toBe("C-99");
+    expect(result.introduced).toBeNull();
+    expect(result.short_title).toBeNull();
+  });
+
   test("rejects a bill missing required fields", () => {
     expect(() =>
       BillSchema.parse({
