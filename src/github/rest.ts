@@ -90,11 +90,28 @@ export async function mergePullRequest(
 
 export async function listOpenPullRequests(owner: string, repo: string) {
   const octokit = getOctokit();
-  const { data } = await octokit.rest.pulls.list({
+  return octokit.paginate(octokit.rest.pulls.list, {
     owner,
     repo,
     state: "open",
     per_page: 100,
   });
-  return data;
+}
+
+export async function findPullRequestByHead(
+  owner: string,
+  repo: string,
+  head: string,
+): Promise<{ number: number; html_url: string } | null> {
+  const octokit = getOctokit();
+  const { data } = await octokit.rest.pulls.list({
+    owner,
+    repo,
+    head: `${owner}:${head}`,
+    state: "open",
+    per_page: 1,
+  });
+  return data.length > 0
+    ? { number: data[0].number, html_url: data[0].html_url }
+    : null;
 }

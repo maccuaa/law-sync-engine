@@ -160,66 +160,81 @@ export async function getProjectItems(
   projectId: string,
 ): Promise<ProjectItem[]> {
   const gql = getGraphqlClient();
+  const allItems: ProjectItem[] = [];
+  let cursor: string | null = null;
 
-  const result = await gql<{
-    node: {
-      items: {
-        nodes: Array<{
-          id: string;
-          content: { number: number; title: string } | null;
-          fieldValues: {
-            nodes: Array<{
-              field?: { name: string };
-              name?: string;
-            }>;
-          };
-        }>;
+  while (true) {
+    const result = await gql<{
+      node: {
+        items: {
+          pageInfo: { hasNextPage: boolean; endCursor: string | null };
+          nodes: Array<{
+            id: string;
+            content: { number: number; title: string } | null;
+            fieldValues: {
+              nodes: Array<{
+                field?: { name: string };
+                name?: string;
+              }>;
+            };
+          }>;
+        };
       };
-    };
-  }>(
-    `query($projectId: ID!) {
-      node(id: $projectId) {
-        ... on ProjectV2 {
-          items(first: 100) {
-            nodes {
-              id
-              content {
-                ... on PullRequest {
-                  number
-                  title
-                }
-                ... on Issue {
-                  number
-                  title
-                }
+    }>(
+      `query($projectId: ID!, $cursor: String) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            items(first: 100, after: $cursor) {
+              pageInfo {
+                hasNextPage
+                endCursor
               }
-              fieldValues(first: 10) {
-                nodes {
-                  ... on ProjectV2ItemFieldSingleSelectValue {
-                    field { ... on ProjectV2SingleSelectField { name } }
-                    name
+              nodes {
+                id
+                content {
+                  ... on PullRequest {
+                    number
+                    title
+                  }
+                  ... on Issue {
+                    number
+                    title
+                  }
+                }
+                fieldValues(first: 10) {
+                  nodes {
+                    ... on ProjectV2ItemFieldSingleSelectValue {
+                      field { ... on ProjectV2SingleSelectField { name } }
+                      name
+                    }
                   }
                 }
               }
             }
           }
         }
-      }
-    }`,
-    { projectId },
-  );
+      }`,
+      { projectId, cursor },
+    );
 
-  return result.node.items.nodes.map((item) => {
-    const fieldValues: Record<string, string> = {};
-    for (const fv of item.fieldValues.nodes) {
-      if (fv.field?.name && fv.name) {
-        fieldValues[fv.field.name] = fv.name;
+    const items = result.node.items;
+    for (const item of items.nodes) {
+      const fieldValues: Record<string, string> = {};
+      for (const fv of item.fieldValues.nodes) {
+        if (fv.field?.name && fv.name) {
+          fieldValues[fv.field.name] = fv.name;
+        }
       }
+      allItems.push({
+        id: item.id,
+        content: item.content ?? undefined,
+        fieldValues,
+      });
     }
-    return {
-      id: item.id,
-      content: item.content ?? undefined,
-      fieldValues,
-    };
-  });
+
+    if (!items.pageInfo.hasNextPage) break;
+    cursor = items.pageInfo.endCursor;
+  }
+
+  return allItems;
 }

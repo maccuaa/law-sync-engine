@@ -36,6 +36,8 @@ export type Politician = z.infer<typeof PoliticianSchema>;
 
 export { PoliticianSchema };
 
+const politicianCache = new Map<string, Politician>();
+
 const PaginationSchema = z.object({
   offset: z.number(),
   limit: z.number(),
@@ -97,24 +99,36 @@ function apiUrl(path: string, params?: Record<string, string>): string {
 }
 
 export async function getCurrentSession(): Promise<string> {
-  // Find the most recently introduced bill to determine the current session.
-  // The default list order is not by date, so we filter to recent bills.
-  const oneYearAgo = new Date();
-  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-  const dateStr = oneYearAgo.toISOString().split("T")[0];
-
-  const url = apiUrl("/bills/", {
-    introduced__gte: dateStr,
-    limit: "1",
-  });
+  // Fetch a batch of recent bills (no date filter) and determine the
+  // most common session. The API returns bills in DB insertion order,
+  // so recent pages will contain current-session bills.
+  const url = apiUrl("/bills/", { limit: "20" });
   const response = await rateLimitedFetch(url);
   const data = BillsListResponseSchema.parse(await response.json());
+
   if (data.objects.length === 0) {
     throw new Error(
-      "No bills found in the last year to detect current session",
+      "No bills found on OpenParliament to detect current session",
     );
   }
-  return data.objects[0].session;
+
+  // Count occurrences of each session
+  const sessionCounts = new Map<string, number>();
+  for (const bill of data.objects) {
+    sessionCounts.set(bill.session, (sessionCounts.get(bill.session) || 0) + 1);
+  }
+
+  // Return the session with the most bills (most likely current)
+  let bestSession = data.objects[0].session;
+  let bestCount = 0;
+  for (const [session, count] of sessionCounts) {
+    if (count > bestCount) {
+      bestCount = count;
+      bestSession = session;
+    }
+  }
+
+  return bestSession;
 }
 
 export async function listBills(session: string): Promise<Bill[]> {
@@ -151,8 +165,16 @@ export async function getBill(session: string, number: string): Promise<Bill> {
 export async function getPolitician(
   politicianUrl: string,
 ): Promise<Politician> {
+  const cached = politicianCache.get(politicianUrl);
+  if (cached) return cached;
+
   const url = apiUrl(politicianUrl);
   const response = await rateLimitedFetch(url);
   const data = PoliticianSchema.parse(await response.json());
+  politicianCache.set(politicianUrl, data);
   return data;
+}
+
+export function clearPoliticianCache(): void {
+  politicianCache.clear();
 }

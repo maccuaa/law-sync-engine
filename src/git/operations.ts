@@ -50,20 +50,30 @@ export async function push(branchName: string, cwd: string): Promise<void> {
   await gitExec(["push", "origin", branchName], cwd);
 }
 
+export async function gitReset(cwd: string): Promise<void> {
+  await gitExec(["reset", "--hard"], cwd);
+  await gitExec(["clean", "-fd"], cwd);
+}
+
 export async function branchExists(
   branchName: string,
   cwd: string,
 ): Promise<boolean> {
+  // Check local branch
   try {
     await gitExec(["rev-parse", "--verify", branchName], cwd);
     return true;
   } catch {
-    // Check remote
-    try {
-      await gitExec(["rev-parse", "--verify", `origin/${branchName}`], cwd);
-      return true;
-    } catch {
-      return false;
-    }
+    // Not a local branch — check remote
+  }
+  // Use ls-remote for reliable remote branch detection (works in fresh clones)
+  try {
+    const output = await gitExec(
+      ["ls-remote", "--heads", "origin", `refs/heads/${branchName}`],
+      cwd,
+    );
+    return output.trim().length > 0;
+  } catch {
+    return false;
   }
 }

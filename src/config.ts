@@ -2,10 +2,11 @@ import { z } from "zod/v4";
 
 const envSchema = z.object({
   GITHUB_TOKEN: z.string().min(1),
-  GITHUB_OWNER: z.string().default("maccuaa"),
-  LAWS_REPO: z.string().default("canadian-laws"),
+  GITHUB_OWNER: z.string().min(1),
+  LAWS_REPO: z.string().min(1),
   LAWS_REPO_PATH: z.string().default("../canadian-laws"),
   PROJECT_NUMBER: z.coerce.number().default(1),
+  SESSION: z.string().optional(),
 });
 
 export type Config = z.infer<typeof envSchema>;

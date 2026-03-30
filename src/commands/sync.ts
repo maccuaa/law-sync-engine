@@ -13,9 +13,14 @@ import {
   checkoutMain,
   commitFile,
   createBranch,
+  gitReset,
   push,
 } from "../git/operations.js";
-import { addLabels, createPullRequest } from "../github/rest.js";
+import {
+  addLabels,
+  createPullRequest,
+  findPullRequestByHead,
+} from "../github/rest.js";
 import { parseBillXml } from "../parsers/bill-xml.js";
 import {
   safeBranchName,
@@ -33,7 +38,7 @@ export async function sync(): Promise<void> {
 
   console.log("🔄 Syncing bills from OpenParliament...");
 
-  const session = await getCurrentSession();
+  const session = config.SESSION || (await getCurrentSession());
   console.log(`📅 Current session: ${session}`);
 
   const bills = await listBills(session);
@@ -51,7 +56,52 @@ export async function sync(): Promise<void> {
 
       const exists = await branchExists(branchName, lawsRepoPath);
       if (exists) {
-        skipCount++;
+        // Branch exists — but does a PR exist too?
+        const existingPr = await findPullRequestByHead(owner, repo, branchName);
+        if (existingPr) {
+          skipCount++;
+          continue;
+        }
+        // Branch exists but no PR — recover by creating the PR
+        console.log(
+          `\n🔧 Recovering orphan branch ${branchName} — creating PR...`,
+        );
+        const safeTitle = sanitizeForGit(bill.short_title?.en || bill.name.en);
+        let author = "Parliament of Canada <info@parl.gc.ca>";
+        if (bill.sponsor_politician_url) {
+          try {
+            const politician = await getPolitician(bill.sponsor_politician_url);
+            if (politician.email) {
+              author = sanitizeGitAuthor(politician.name, politician.email);
+            }
+          } catch {
+            // Use default author
+          }
+        }
+        try {
+          const prBody = buildPrBody(bill, session, author);
+          const pr = await createPullRequest({
+            owner,
+            repo,
+            title: `Bill ${validatedNumber}: ${safeTitle}`,
+            body: prBody,
+            head: branchName,
+            base: "main",
+          });
+          console.log(`  📝 Recovered PR #${pr.number}: ${pr.html_url}`);
+          const labels = ["bill", session];
+          if (bill.home_chamber === "House") labels.push("house");
+          if (bill.home_chamber === "Senate") labels.push("senate");
+          try {
+            await addLabels(owner, repo, pr.number, labels);
+          } catch {
+            // Non-fatal
+          }
+          newCount++;
+        } catch (e) {
+          console.error(`  ❌ Failed to recover PR for ${branchName}: ${e}`);
+          failCount++;
+        }
         continue;
       }
 
@@ -153,9 +203,13 @@ export async function sync(): Promise<void> {
     } catch (error) {
       console.error(`  ❌ Failed to process ${bill.number}: ${error}`);
       try {
+        await gitReset(lawsRepoPath);
         await checkoutMain(lawsRepoPath);
-      } catch {
-        /* best-effort return to main */
+      } catch (resetError) {
+        console.error(`  💀 Git state corrupted, aborting sync: ${resetError}`);
+        throw new Error(
+          `Git recovery failed after processing ${bill.number}: ${resetError}`,
+        );
       }
       failCount++;
     }

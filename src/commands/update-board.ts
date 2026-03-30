@@ -97,7 +97,7 @@ export async function updateBoard(): Promise<void> {
   console.log(`  📝 Found ${openPrs.length} open PRs`);
 
   // 5. Get current session bills (list endpoint for quick lookup)
-  const session = await getCurrentSession();
+  const session = config.SESSION || (await getCurrentSession());
   const bills = await listBills(session);
   const billsByNumber = new Map(bills.map((b) => [b.number, b]));
 
